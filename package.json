@@ -4,8 +4,7 @@
   "description": "Velvet Flame Restaurant Website with WhatsApp Order System",
   "main": "js/main.js",
   "scripts": {
-    "dev": "npx vercel dev",
-    "build": "echo 'Static site ready for Vercel deployment'"
+    "dev": "npx vercel dev"
   },
   "keywords": [
     "restaurant",
