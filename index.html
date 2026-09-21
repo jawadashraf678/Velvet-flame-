@@ -832,7 +832,145 @@
     </div>
   </aside>
 
-  <!-- JavaScript -->
+  <!-- ==========================================
+       CHECKOUT MODAL
+       ========================================== -->
+  <div class="checkout-modal-overlay" id="checkoutModalOverlay"></div>
+  <div class="checkout-modal" id="checkoutModal" role="dialog" aria-labelledby="checkoutModalTitle" aria-hidden="true">
+    <div class="checkout-modal-header">
+      <div>
+        <h3 id="checkoutModalTitle" class="checkout-modal-title">
+          <i class="fas fa-fire-flame-curved" style="color: var(--flame-amber);"></i> Complete Your Order
+        </h3>
+        <span class="checkout-modal-subtitle">VELVET FLAME — Luxury Gourmet Checkout</span>
+      </div>
+      <button class="checkout-close" id="checkoutClose" aria-label="Close Checkout Modal">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    <div class="checkout-modal-body">
+      <!-- Order Summary Card -->
+      <div class="checkout-section">
+        <div class="checkout-section-header">
+          <h4><i class="fas fa-shopping-bag text-gold"></i> 1. Selected Items</h4>
+          <button type="button" class="btn-link-gold" id="modalAddMoreBtn">
+            <i class="fas fa-plus-circle"></i> Add More Items
+          </button>
+        </div>
+        <div class="checkout-items-list" id="checkoutItemsList">
+          <!-- Dynamic Checkout Items -->
+        </div>
+      </div>
+
+      <!-- Order Type Selector -->
+      <div class="checkout-section">
+        <h4><i class="fas fa-truck-ramp-box text-gold"></i> 2. Order Type</h4>
+        <div class="order-type-tabs">
+          <button type="button" class="order-type-tab active" data-type="delivery" id="typeBtnDelivery">
+            <i class="fas fa-motorcycle"></i> Delivery
+          </button>
+          <button type="button" class="order-type-tab" data-type="pickup" id="typeBtnPickup">
+            <i class="fas fa-store"></i> Self Pickup
+          </button>
+        </div>
+      </div>
+
+      <!-- Customer Details Form -->
+      <div class="checkout-section">
+        <h4><i class="fas fa-user-check text-gold"></i> 3. Customer Information</h4>
+        <form id="checkoutForm" novalidate>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label" for="custName">Full Name <span class="required-star">*</span></label>
+              <input type="text" id="custName" class="form-input" placeholder="e.g. Ali Ahmed" required>
+              <span class="field-error-msg" id="errCustName"></span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="custPhone">WhatsApp / Phone Number <span class="required-star">*</span></label>
+              <input type="tel" id="custPhone" class="form-input" placeholder="e.g. 03291132481 or +923291132481" required>
+              <span class="field-error-msg" id="errCustPhone"></span>
+            </div>
+          </div>
+
+          <!-- Delivery Fields Group (Shown only for delivery) -->
+          <div id="deliveryFieldsGroup" class="delivery-fields-group">
+            <div class="form-group">
+              <label class="form-label" for="custAddress">Delivery Address <span class="required-star">*</span></label>
+              <input type="text" id="custAddress" class="form-input" placeholder="House/Apartment #, Street, Block">
+              <span class="field-error-msg" id="errCustAddress"></span>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label" for="custLocality">Area / Locality <span class="required-star">*</span></label>
+                <input type="text" id="custLocality" class="form-input" placeholder="e.g. Gulberg III, DHA Phase 5, Model Town" required>
+                <span class="field-error-msg" id="errCustLocality"></span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="custInstructions">Delivery Instructions (Optional)</label>
+                <input type="text" id="custInstructions" class="form-input" placeholder="e.g. Ring bell, gate #2">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="custNotes">Special Instructions / Order Notes (Optional)</label>
+            <textarea id="custNotes" class="form-textarea" rows="2" placeholder="e.g. Extra spicy, no onions, garlic dip on the side"></textarea>
+          </div>
+
+          <div class="consent-checkbox-group">
+            <label class="checkbox-label" for="custConsent">
+              <input type="checkbox" id="custConsent" checked required>
+              <span class="checkbox-text">
+                I consent to receiving order status updates and notifications via WhatsApp from <strong>VELVET FLAME</strong>. <span class="required-star">*</span>
+              </span>
+            </label>
+            <span class="field-error-msg" id="errCustConsent"></span>
+          </div>
+        </form>
+      </div>
+
+      <!-- Financial Breakdown -->
+      <div class="checkout-summary-box">
+        <div class="summary-row">
+          <span>Items Subtotal:</span>
+          <span id="summarySubtotal">Rs. 0</span>
+        </div>
+        <div class="summary-row" id="summaryDeliveryRow">
+          <span>Delivery Fee:</span>
+          <span id="summaryDeliveryFee">Rs. 150</span>
+        </div>
+        <div class="summary-row grand-total-row">
+          <span>Grand Total:</span>
+          <span id="summaryGrandTotal">Rs. 0</span>
+        </div>
+      </div>
+
+      <!-- Alert / Status Notification Banner -->
+      <div class="checkout-alert-banner" id="checkoutAlert" style="display: none;"></div>
+
+      <!-- Dual Order Submission Buttons -->
+      <div class="checkout-actions">
+        <button type="button" class="btn btn-whatsapp-direct" id="btnMethodA">
+          <i class="fab fa-whatsapp"></i> ORDER VIA WHATSAPP (DIRECT)
+        </button>
+        <button type="button" class="btn btn-flame" id="btnMethodB">
+          <i class="fas fa-paper-plane"></i> PLACE ORDER (AUTO NOTIFY)
+        </button>
+      </div>
+
+      <div class="checkout-footer-note">
+        <i class="fas fa-shield-halved"></i> <strong>Method A</strong> opens WhatsApp directly with your pre-filled order. <strong>Method B</strong> sends automatic notifications to the restaurant kitchen.
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Imports -->
+  <script src="js/config.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>
+

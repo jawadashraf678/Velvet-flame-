@@ -1,0 +1,18 @@
+{
+  "name": "velvet-flame-website",
+  "version": "1.0.0",
+  "description": "Velvet Flame Restaurant Website with WhatsApp Order System",
+  "main": "js/main.js",
+  "scripts": {
+    "dev": "npx vercel dev",
+    "build": "echo 'Static site ready for Vercel deployment'"
+  },
+  "keywords": [
+    "restaurant",
+    "velvet-flame",
+    "whatsapp-order",
+    "vercel"
+  ],
+  "author": "Velvet Flame",
+  "license": "MIT"
+}

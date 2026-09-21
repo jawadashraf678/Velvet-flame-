@@ -185,10 +185,50 @@ document.addEventListener('DOMContentLoaded', () => {
   renderMenuItems(menuData);
 
   // ------------------------------------------------------------------------
-  // 3. Interactive Shopping Cart System
+  // 3. Interactive Shopping Cart & Velvet Flame WhatsApp Checkout System
   // ------------------------------------------------------------------------
   let cart = [];
+  let currentOrderType = 'delivery';
 
+  // LocalStorage Persistence Helpers
+  function loadCartFromStorage() {
+    try {
+      const saved = localStorage.getItem('velvet_flame_cart');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          cart = parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Unable to load cart from localStorage', e);
+    }
+  }
+
+  function saveCartToStorage() {
+    try {
+      if (cart && cart.length > 0) {
+        localStorage.setItem('velvet_flame_cart', JSON.stringify(cart));
+      } else {
+        localStorage.removeItem('velvet_flame_cart');
+      }
+    } catch (e) {
+      console.warn('Unable to save cart to localStorage', e);
+    }
+  }
+
+  // Safe configuration lookup
+  const config = typeof RESTAURANT_CONFIG !== 'undefined' ? RESTAURANT_CONFIG : {
+    name: "VELVET FLAME",
+    phoneDisplay: "+92 329 1132481",
+    whatsappNumber: "923291132481",
+    currency: "Rs.",
+    deliveryFee: 150,
+    freeDeliveryThreshold: 2500,
+    apiEndpoint: "/api/order"
+  };
+
+  // UI Element References
   const cartTrigger = document.querySelector('.cart-trigger');
   const cartOverlay = document.getElementById('cartDrawerOverlay');
   const cartDrawer = document.getElementById('cartDrawer');
@@ -198,6 +238,27 @@ document.addEventListener('DOMContentLoaded', () => {
   const cartTotalAmount = document.getElementById('cartTotalAmount');
   const checkoutBtn = document.getElementById('checkoutBtn');
 
+  // Modal Element References
+  const checkoutModalOverlay = document.getElementById('checkoutModalOverlay');
+  const checkoutModal = document.getElementById('checkoutModal');
+  const checkoutClose = document.getElementById('checkoutClose');
+  const checkoutItemsList = document.getElementById('checkoutItemsList');
+  const modalAddMoreBtn = document.getElementById('modalAddMoreBtn');
+
+  const typeBtnDelivery = document.getElementById('typeBtnDelivery');
+  const typeBtnPickup = document.getElementById('typeBtnPickup');
+  const deliveryFieldsGroup = document.getElementById('deliveryFieldsGroup');
+
+  const summarySubtotal = document.getElementById('summarySubtotal');
+  const summaryDeliveryFee = document.getElementById('summaryDeliveryFee');
+  const summaryGrandTotal = document.getElementById('summaryGrandTotal');
+  const summaryDeliveryRow = document.getElementById('summaryDeliveryRow');
+
+  const btnMethodA = document.getElementById('btnMethodA');
+  const btnMethodB = document.getElementById('btnMethodB');
+  const checkoutAlert = document.getElementById('checkoutAlert');
+
+  // Drawer Controls
   function openCart() {
     if (cartOverlay && cartDrawer) {
       cartOverlay.classList.add('active');
@@ -216,7 +277,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (cartClose) cartClose.addEventListener('click', closeCart);
   if (cartOverlay) cartOverlay.addEventListener('click', closeCart);
 
+  // Cart UI Update Sync
   function updateCartUI() {
+    saveCartToStorage(); // Persist to localStorage
+
     const totalCount = cart.reduce((sum, item) => sum + item.quantity, 0);
     const totalPrice = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
@@ -227,28 +291,37 @@ document.addEventListener('DOMContentLoaded', () => {
       cartBadge.classList.add('bump');
     }
 
-    if (!cartBody) return;
-
-    if (cart.length === 0) {
-      cartBody.innerHTML = `<div class="cart-empty-msg"><i class="fas fa-shopping-bag" style="font-size: 2.5rem; margin-bottom: 12px; opacity:0.4;"></i><p>Your order bag is currently empty.</p></div>`;
-    } else {
-      cartBody.innerHTML = cart.map(item => `
-        <div class="cart-item">
-          <div class="cart-item-info">
-            <h4>${item.title}</h4>
-            <span>Rs. ${(item.price * item.quantity).toLocaleString()}</span>
+    if (cartBody) {
+      if (cart.length === 0) {
+        cartBody.innerHTML = `
+          <div class="cart-empty-msg">
+            <i class="fas fa-shopping-bag" style="font-size: 2.5rem; margin-bottom: 12px; opacity:0.4;"></i>
+            <p>Your order bag is currently empty.</p>
+          </div>`;
+      } else {
+        cartBody.innerHTML = cart.map(item => `
+          <div class="cart-item">
+            <div class="cart-item-info">
+              <h4>${item.title}</h4>
+              <span>Rs. ${(item.price * item.quantity).toLocaleString()}</span>
+            </div>
+            <div class="cart-item-qty">
+              <button class="qty-btn" onclick="changeQty('${item.id}', -1)">-</button>
+              <span>${item.quantity}</span>
+              <button class="qty-btn" onclick="changeQty('${item.id}', 1)">+</button>
+            </div>
           </div>
-          <div class="cart-item-qty">
-            <button class="qty-btn" onclick="changeQty('${item.id}', -1)">-</button>
-            <span>${item.quantity}</span>
-            <button class="qty-btn" onclick="changeQty('${item.id}', 1)">+</button>
-          </div>
-        </div>
-      `).join('');
+        `).join('');
+      }
     }
 
     if (cartTotalAmount) {
       cartTotalAmount.textContent = `Rs. ${totalPrice.toLocaleString()}`;
+    }
+
+    // Keep Modal in sync if active
+    if (checkoutModal && checkoutModal.classList.contains('active')) {
+      renderCheckoutModalItems();
     }
   }
 
@@ -276,31 +349,460 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function attachAddToCartListeners() {
     document.querySelectorAll('.add-to-cart-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      // Remove any previously cloned handlers to prevent duplicates
+      const newBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newBtn, btn);
+
+      newBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        const id = btn.getAttribute('data-id');
-        const title = btn.getAttribute('data-title');
-        const price = btn.getAttribute('data-price');
+        const id = newBtn.getAttribute('data-id');
+        const title = newBtn.getAttribute('data-title');
+        const price = newBtn.getAttribute('data-price');
         addToCart(id, title, price);
+
+        // Open checkout modal directly if user clicked add to order
+        openCheckoutModal();
       });
     });
   }
 
-  // Initial attachment for static buttons (e.g. Signature dishes & combos)
   attachAddToCartListeners();
 
+  // Load saved cart items from localStorage on initial page load
+  loadCartFromStorage();
+  updateCartUI();
+
+  // ------------------------------------------------------------------------
+  // Checkout Modal Functionality
+  // ------------------------------------------------------------------------
+  function openCheckoutModal() {
+    if (cart.length === 0) {
+      showToast('Your order bag is empty! Please add dishes to proceed.');
+      return;
+    }
+
+    closeCart(); // Close drawer if open
+
+    if (checkoutModalOverlay && checkoutModal) {
+      renderCheckoutModalItems();
+      resetFormValidation();
+      hideCheckoutAlert();
+
+      checkoutModalOverlay.classList.add('active');
+      checkoutModal.classList.add('active');
+      checkoutModal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+    }
+  }
+
+  function closeCheckoutModal() {
+    if (checkoutModalOverlay && checkoutModal) {
+      checkoutModalOverlay.classList.remove('active');
+      checkoutModal.classList.remove('active');
+      checkoutModal.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+    }
+  }
+
+  if (checkoutClose) checkoutClose.addEventListener('click', closeCheckoutModal);
+  if (checkoutModalOverlay) checkoutModalOverlay.addEventListener('click', closeCheckoutModal);
   if (checkoutBtn) {
     checkoutBtn.addEventListener('click', () => {
-      if (cart.length === 0) {
-        showToast('Your cart is empty!');
-        return;
-      }
-      showToast('Thank you! Your Velvet Flame order has been submitted successfully.');
-      cart = [];
-      updateCartUI();
-      closeCart();
+      openCheckoutModal();
     });
   }
+
+  if (modalAddMoreBtn) {
+    modalAddMoreBtn.addEventListener('click', () => {
+      closeCheckoutModal();
+      const menuSection = document.getElementById('full-menu') || document.getElementById('signature-dishes');
+      if (menuSection) {
+        menuSection.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+  }
+
+  // Render items inside Checkout Modal
+  function renderCheckoutModalItems() {
+    if (!checkoutItemsList) return;
+
+    if (cart.length === 0) {
+      checkoutItemsList.innerHTML = `
+        <div style="text-align: center; color: var(--text-muted); padding: 20px;">
+          No items selected. Add items from the menu to complete your order.
+        </div>`;
+      calculateTotals();
+      return;
+    }
+
+    checkoutItemsList.innerHTML = cart.map(item => `
+      <div class="checkout-item-row">
+        <div class="checkout-item-details">
+          <div class="checkout-item-title">${item.title}</div>
+          <div class="checkout-item-unitprice">Rs. ${item.price.toLocaleString()} each</div>
+        </div>
+        <div class="checkout-item-controls">
+          <button type="button" class="qty-btn" onclick="changeQty('${item.id}', -1)">-</button>
+          <span>${item.quantity}</span>
+          <button type="button" class="qty-btn" onclick="changeQty('${item.id}', 1)">+</button>
+        </div>
+        <div class="checkout-item-subtotal">
+          Rs. ${(item.price * item.quantity).toLocaleString()}
+        </div>
+        <button type="button" class="checkout-item-remove" title="Remove Item" onclick="changeQty('${item.id}', -${item.quantity})">
+          <i class="fas fa-trash-can"></i>
+        </button>
+      </div>
+    `).join('');
+
+    calculateTotals();
+  }
+
+  // Order Type Switching (Delivery vs Pickup)
+  if (typeBtnDelivery && typeBtnPickup) {
+    typeBtnDelivery.addEventListener('click', () => {
+      currentOrderType = 'delivery';
+      typeBtnDelivery.classList.add('active');
+      typeBtnPickup.classList.remove('active');
+      if (deliveryFieldsGroup) deliveryFieldsGroup.classList.remove('hidden');
+      calculateTotals();
+    });
+
+    typeBtnPickup.addEventListener('click', () => {
+      currentOrderType = 'pickup';
+      typeBtnPickup.classList.add('active');
+      typeBtnDelivery.classList.remove('active');
+      if (deliveryFieldsGroup) deliveryFieldsGroup.classList.add('hidden');
+      calculateTotals();
+    });
+  }
+
+  // Calculate Subtotal, Delivery Fee & Grand Total
+  function calculateTotals() {
+    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    let fee = 0;
+
+    if (currentOrderType === 'delivery') {
+      if (config.freeDeliveryThreshold > 0 && subtotal >= config.freeDeliveryThreshold) {
+        fee = 0;
+      } else {
+        fee = config.deliveryFee;
+      }
+    } else {
+      fee = 0;
+    }
+
+    const grandTotal = subtotal + fee;
+
+    if (summarySubtotal) summarySubtotal.textContent = `Rs. ${subtotal.toLocaleString()}`;
+
+    if (summaryDeliveryFee) {
+      if (currentOrderType === 'pickup') {
+        summaryDeliveryFee.textContent = 'Free (Pickup)';
+      } else if (fee === 0 && config.freeDeliveryThreshold > 0) {
+        summaryDeliveryFee.textContent = 'FREE (Offer Applied)';
+      } else {
+        summaryDeliveryFee.textContent = `Rs. ${fee.toLocaleString()}`;
+      }
+    }
+
+    if (summaryGrandTotal) summaryGrandTotal.textContent = `Rs. ${grandTotal.toLocaleString()}`;
+
+    return { subtotal, fee, grandTotal };
+  }
+
+  // Reset Form Errors
+  function resetFormValidation() {
+    ['errCustName', 'errCustPhone', 'errCustAddress', 'errCustLocality', 'errCustConsent'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '';
+    });
+    ['custName', 'custPhone', 'custAddress', 'custLocality'].forEach(id => {
+      const input = document.getElementById(id);
+      if (input) input.classList.remove('invalid');
+    });
+  }
+
+  // Validate Form Inputs
+  function validateCheckoutForm() {
+    resetFormValidation();
+    let isValid = true;
+
+    const nameInput = document.getElementById('custName');
+    const phoneInput = document.getElementById('custPhone');
+    const addressInput = document.getElementById('custAddress');
+    const localityInput = document.getElementById('custLocality');
+    const consentInput = document.getElementById('custConsent');
+
+    const nameVal = nameInput ? nameInput.value.trim() : '';
+    const phoneVal = phoneInput ? phoneInput.value.trim() : '';
+    const addressVal = addressInput ? addressInput.value.trim() : '';
+    const localityVal = localityInput ? localityInput.value.trim() : '';
+    const consentVal = consentInput ? consentInput.checked : false;
+
+    if (!nameVal) {
+      showFieldError('errCustName', 'custName', 'Full Name is required.');
+      isValid = false;
+    }
+
+    if (!phoneVal) {
+      showFieldError('errCustPhone', 'custPhone', 'WhatsApp / Phone Number is required.');
+      isValid = false;
+    } else if (phoneVal.length < 8) {
+      showFieldError('errCustPhone', 'custPhone', 'Please enter a valid phone number (at least 8 digits).');
+      isValid = false;
+    }
+
+    if (currentOrderType === 'delivery') {
+      if (!addressVal) {
+        showFieldError('errCustAddress', 'custAddress', 'Complete delivery address is required.');
+        isValid = false;
+      }
+      if (!localityVal) {
+        showFieldError('errCustLocality', 'custLocality', 'Area / Locality is required.');
+        isValid = false;
+      }
+    }
+
+    if (!consentVal) {
+      showFieldError('errCustConsent', null, 'You must consent to WhatsApp communications to place an order.');
+      isValid = false;
+    }
+
+    if (cart.length === 0) {
+      showCheckoutAlert('error', '<i class="fas fa-exclamation-circle"></i> Your cart is empty! Please add menu items before checking out.');
+      isValid = false;
+    }
+
+    return isValid;
+  }
+
+  function showFieldError(errorId, inputId, message) {
+    const errEl = document.getElementById(errorId);
+    if (errEl) errEl.textContent = message;
+    if (inputId) {
+      const input = document.getElementById(inputId);
+      if (input) input.classList.add('invalid');
+    }
+  }
+
+  function showCheckoutAlert(type, messageHTML) {
+    if (!checkoutAlert) return;
+    checkoutAlert.className = `checkout-alert-banner ${type}`;
+    checkoutAlert.innerHTML = messageHTML;
+    checkoutAlert.style.display = 'flex';
+  }
+
+  function hideCheckoutAlert() {
+    if (!checkoutAlert) return;
+    checkoutAlert.style.display = 'none';
+    checkoutAlert.innerHTML = '';
+  }
+
+  // ------------------------------------------------------------------------
+  // METHOD A: Customer-Initiated WhatsApp Order (wa.me Link)
+  // ------------------------------------------------------------------------
+  if (btnMethodA) {
+    btnMethodA.addEventListener('click', (e) => {
+      e.preventDefault();
+
+      if (!validateCheckoutForm()) return;
+
+      const nameVal = document.getElementById('custName').value.trim();
+      const phoneVal = document.getElementById('custPhone').value.trim();
+      const addressVal = document.getElementById('custAddress').value.trim();
+      const localityVal = document.getElementById('custLocality') ? document.getElementById('custLocality').value.trim() : '';
+      const instructionsVal = document.getElementById('custInstructions') ? document.getElementById('custInstructions').value.trim() : '';
+      const notesVal = document.getElementById('custNotes') ? document.getElementById('custNotes').value.trim() : '';
+
+      const { subtotal, fee, grandTotal } = calculateTotals();
+
+      // Format clean readable WhatsApp message
+      let messageLines = [
+        `🔥 *VELVET FLAME — NEW ORDER* 🔥`,
+        `==============================`,
+        `👤 *Customer Name:* ${nameVal}`,
+        `📞 *WhatsApp / Phone:* ${phoneVal}`,
+        `🛵 *Order Type:* ${currentOrderType.toUpperCase()}`
+      ];
+
+      if (currentOrderType === 'delivery') {
+        messageLines.push(`📍 *Delivery Address:* ${addressVal}`);
+        if (localityVal) messageLines.push(`🏘️ *Area / Locality:* ${localityVal}`);
+        if (instructionsVal) messageLines.push(`📌 *Instructions:* ${instructionsVal}`);
+      }
+
+      messageLines.push(
+        `------------------------------`,
+        `🛒 *ORDER ITEMS:*`
+      );
+
+      cart.forEach(item => {
+        messageLines.push(`• *${item.title}* x${item.quantity} = Rs. ${(item.price * item.quantity).toLocaleString()}`);
+      });
+
+      messageLines.push(
+        `------------------------------`,
+        `💵 *Items Subtotal:* Rs. ${subtotal.toLocaleString()}`
+      );
+
+      if (currentOrderType === 'delivery') {
+        messageLines.push(`🚚 *Delivery Fee:* ${fee === 0 ? 'FREE' : 'Rs. ' + fee.toLocaleString()}`);
+      } else {
+        messageLines.push(`🏬 *Pickup:* Free`);
+      }
+
+      messageLines.push(
+        `💰 *GRAND TOTAL: Rs. ${grandTotal.toLocaleString()}*`,
+        `==============================`
+      );
+
+      if (notesVal) {
+        messageLines.push(`📝 *Special Notes:* ${notesVal}`);
+      }
+
+      messageLines.push(`\nThank you for ordering from Velvet Flame!`);
+
+      const fullText = messageLines.join('\n');
+      const encodedText = encodeURIComponent(fullText);
+      const whatsappUrl = `https://wa.me/${config.whatsappNumber}?text=${encodedText}`;
+
+      // Open WhatsApp click-to-chat
+      window.open(whatsappUrl, '_blank');
+
+      // Clear cart immediately so next order starts with a fresh empty list!
+      cart = [];
+      updateCartUI();
+
+      // Display explicit instructions to press SEND in WhatsApp
+      showCheckoutAlert(
+        'info',
+        `<div>
+          <strong><i class="fab fa-whatsapp"></i> WhatsApp Window Opened!</strong><br>
+          Please tap <strong>SEND</strong> inside WhatsApp to submit your order directly to <strong>VELVET FLAME (${config.phoneDisplay})</strong>.<br>
+          <small>Your order bag has been cleared for your next purchase.</small>
+        </div>`
+      );
+
+      showToast('WhatsApp opened! Cart cleared for your next order.');
+
+      // Auto close modal after a brief pause
+      setTimeout(() => {
+        closeCheckoutModal();
+      }, 3500);
+    });
+  }
+
+  // ------------------------------------------------------------------------
+  // METHOD B: Automatic WhatsApp Backend Notification (Vercel Serverless API)
+  // ------------------------------------------------------------------------
+  if (btnMethodB) {
+    btnMethodB.addEventListener('click', async (e) => {
+      e.preventDefault();
+
+      if (!validateCheckoutForm()) return;
+
+      const nameVal = document.getElementById('custName').value.trim();
+      const phoneVal = document.getElementById('custPhone').value.trim();
+      const addressVal = document.getElementById('custAddress').value.trim();
+      const localityVal = document.getElementById('custLocality') ? document.getElementById('custLocality').value.trim() : '';
+      const instructionsVal = document.getElementById('custInstructions') ? document.getElementById('custInstructions').value.trim() : '';
+      const notesVal = document.getElementById('custNotes') ? document.getElementById('custNotes').value.trim() : '';
+      const consentVal = document.getElementById('custConsent').checked;
+
+      const orderPayload = {
+        customerName: nameVal,
+        customerPhone: phoneVal,
+        orderType: currentOrderType,
+        deliveryAddress: addressVal,
+        locality: localityVal,
+        instructions: instructionsVal,
+        notes: notesVal,
+        consent: consentVal,
+        items: cart.map(i => ({ id: i.id, title: i.title, price: i.price, quantity: i.quantity }))
+      };
+
+      // UI Loading State
+      btnMethodA.disabled = true;
+      btnMethodB.disabled = true;
+      btnMethodB.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Submitting Order...`;
+
+      showCheckoutAlert('loading', `<i class="fas fa-circle-notch fa-spin"></i> Submitting order to server & sending automatic WhatsApp notification...`);
+
+      try {
+        const response = await fetch(config.apiEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(orderPayload)
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'NOTIFICATION_SENT') {
+          showCheckoutAlert(
+            'info',
+            `<div>
+              <strong><i class="fas fa-circle-check"></i> Order Placed Successfully! (ID: ${data.orderId})</strong><br>
+              An automatic WhatsApp notification has been sent directly to the Velvet Flame kitchen. Your order total is <strong>Rs. ${data.orderSummary.grandTotal.toLocaleString()}</strong>.
+            </div>`
+          );
+          showToast(`Order ${data.orderId} submitted! WhatsApp notification sent.`);
+          cart = [];
+          updateCartUI();
+          setTimeout(() => {
+            closeCheckoutModal();
+          }, 4500);
+
+        } else if (data.status === 'UNCONFIGURED') {
+          showCheckoutAlert(
+            'warning',
+            `<div>
+              <strong><i class="fas fa-triangle-exclamation"></i> Order #${data.orderId} Generated (API Unconfigured)</strong><br>
+              Automatic server notifications require Meta WhatsApp Cloud API credentials on Vercel.<br>
+              <strong>Please click "ORDER VIA WHATSAPP (DIRECT)" below to send your order instantly!</strong>
+            </div>`
+          );
+          showToast('Automatic notifications not configured. Please use Order via WhatsApp (Direct).');
+
+        } else if (data.status === 'NOTIFICATION_FAILED') {
+          showCheckoutAlert(
+            'warning',
+            `<div>
+              <strong><i class="fas fa-exclamation-triangle"></i> Order #${data.orderId} Recorded (Notification Failed)</strong><br>
+              ${data.message || 'WhatsApp API server error.'}<br>
+              <strong>Please use "ORDER VIA WHATSAPP (DIRECT)" below to ensure your order reaches the kitchen.</strong>
+            </div>`
+          );
+
+        } else {
+          showCheckoutAlert(
+            'error',
+            `<div>
+              <strong><i class="fas fa-circle-xmark"></i> Submission Error</strong><br>
+              ${data.error || data.message || 'Unable to complete order via server.'} Please try again or use Order via WhatsApp (Direct).
+            </div>`
+          );
+        }
+
+      } catch (err) {
+        console.error('Checkout Submit Error:', err);
+        showCheckoutAlert(
+          'error',
+          `<div>
+            <strong><i class="fas fa-wifi"></i> Network Error</strong><br>
+            Unable to connect to backend serverless endpoint (${config.apiEndpoint}). Please check your connection or use <strong>ORDER VIA WHATSAPP (DIRECT)</strong>.
+          </div>`
+        );
+      } finally {
+        btnMethodA.disabled = false;
+        btnMethodB.disabled = false;
+        btnMethodB.innerHTML = `<i class="fas fa-paper-plane"></i> PLACE ORDER (AUTO NOTIFY)`;
+      }
+    });
+  }
+
 
   // ------------------------------------------------------------------------
   // 4. Contact Form & Toast Notifications
