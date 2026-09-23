@@ -255,7 +255,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const summaryDeliveryRow = document.getElementById('summaryDeliveryRow');
 
   const btnMethodA = document.getElementById('btnMethodA');
-  const btnMethodB = document.getElementById('btnMethodB');
   const checkoutAlert = document.getElementById('checkoutAlert');
 
   // Drawer Controls
@@ -693,115 +692,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ------------------------------------------------------------------------
-  // METHOD B: Automatic WhatsApp Backend Notification (Vercel Serverless API)
-  // ------------------------------------------------------------------------
-  if (btnMethodB) {
-    btnMethodB.addEventListener('click', async (e) => {
-      e.preventDefault();
 
-      if (!validateCheckoutForm()) return;
-
-      const nameVal = document.getElementById('custName').value.trim();
-      const phoneVal = document.getElementById('custPhone').value.trim();
-      const addressVal = document.getElementById('custAddress').value.trim();
-      const localityVal = document.getElementById('custLocality') ? document.getElementById('custLocality').value.trim() : '';
-      const instructionsVal = document.getElementById('custInstructions') ? document.getElementById('custInstructions').value.trim() : '';
-      const notesVal = document.getElementById('custNotes') ? document.getElementById('custNotes').value.trim() : '';
-      const consentVal = document.getElementById('custConsent').checked;
-
-      const orderPayload = {
-        customerName: nameVal,
-        customerPhone: phoneVal,
-        orderType: currentOrderType,
-        deliveryAddress: addressVal,
-        locality: localityVal,
-        instructions: instructionsVal,
-        notes: notesVal,
-        consent: consentVal,
-        items: cart.map(i => ({ id: i.id, title: i.title, price: i.price, quantity: i.quantity }))
-      };
-
-      // UI Loading State
-      btnMethodA.disabled = true;
-      btnMethodB.disabled = true;
-      btnMethodB.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Submitting Order...`;
-
-      showCheckoutAlert('loading', `<i class="fas fa-circle-notch fa-spin"></i> Submitting order to server & sending automatic WhatsApp notification...`);
-
-      try {
-        const response = await fetch(config.apiEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(orderPayload)
-        });
-
-        const data = await response.json();
-
-        if (data.status === 'NOTIFICATION_SENT') {
-          showCheckoutAlert(
-            'info',
-            `<div>
-              <strong><i class="fas fa-circle-check"></i> Order Placed Successfully! (ID: ${data.orderId})</strong><br>
-              An automatic WhatsApp notification has been sent directly to the Velvet Flame kitchen. Your order total is <strong>Rs. ${data.orderSummary.grandTotal.toLocaleString()}</strong>.
-            </div>`
-          );
-          showToast(`Order ${data.orderId} submitted! WhatsApp notification sent.`);
-          cart = [];
-          updateCartUI();
-          setTimeout(() => {
-            closeCheckoutModal();
-          }, 4500);
-
-        } else if (data.status === 'UNCONFIGURED') {
-          showCheckoutAlert(
-            'warning',
-            `<div>
-              <strong><i class="fas fa-triangle-exclamation"></i> Order #${data.orderId} Generated (API Unconfigured)</strong><br>
-              Automatic server notifications require Meta WhatsApp Cloud API credentials on Vercel.<br>
-              <strong>Please click "ORDER VIA WHATSAPP (DIRECT)" below to send your order instantly!</strong>
-            </div>`
-          );
-          showToast('Automatic notifications not configured. Please use Order via WhatsApp (Direct).');
-
-        } else if (data.status === 'NOTIFICATION_FAILED') {
-          showCheckoutAlert(
-            'warning',
-            `<div>
-              <strong><i class="fas fa-exclamation-triangle"></i> Order #${data.orderId} Recorded (Notification Failed)</strong><br>
-              ${data.message || 'WhatsApp API server error.'}<br>
-              <strong>Please use "ORDER VIA WHATSAPP (DIRECT)" below to ensure your order reaches the kitchen.</strong>
-            </div>`
-          );
-
-        } else {
-          showCheckoutAlert(
-            'error',
-            `<div>
-              <strong><i class="fas fa-circle-xmark"></i> Submission Error</strong><br>
-              ${data.error || data.message || 'Unable to complete order via server.'} Please try again or use Order via WhatsApp (Direct).
-            </div>`
-          );
-        }
-
-      } catch (err) {
-        console.error('Checkout Submit Error:', err);
-        showCheckoutAlert(
-          'error',
-          `<div>
-            <strong><i class="fas fa-wifi"></i> Network Error</strong><br>
-            Unable to connect to backend serverless endpoint (${config.apiEndpoint}). Please check your connection or use <strong>ORDER VIA WHATSAPP (DIRECT)</strong>.
-          </div>`
-        );
-      } finally {
-        btnMethodA.disabled = false;
-        btnMethodB.disabled = false;
-        btnMethodB.innerHTML = `<i class="fas fa-paper-plane"></i> PLACE ORDER (AUTO NOTIFY)`;
-      }
-    });
-  }
 
 
   // ------------------------------------------------------------------------
